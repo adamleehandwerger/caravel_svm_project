@@ -1,0 +1,5 @@
+# SPDX-FileCopyrightText: 2024 Adam Handwerger
+# SPDX-License-Identifier: Apache-2.0
+
+Tests:
+    - {name: svm_wb_test, sim: RTL}
