@@ -14,11 +14,7 @@
         "u_sv_ram.sv_macros[0].macro vccd1 vssd1 vccd1 vssd1",
         "u_sv_ram.sv_macros[1].macro vccd1 vssd1 vccd1 vssd1",
         "u_sv_ram.sv_macros[2].macro vccd1 vssd1 vccd1 vssd1",
-        "u_sv_ram.sv_macros[3].macro vccd1 vssd1 vccd1 vssd1",
-        "u_sv_ram.sv_macros[4].macro vccd1 vssd1 vccd1 vssd1",
-        "u_sv_ram.sv_macros[5].macro vccd1 vssd1 vccd1 vssd1",
-        "u_sv_ram.sv_macros[6].macro vccd1 vssd1 vccd1 vssd1",
-        "u_sv_ram.sv_macros[7].macro vccd1 vssd1 vccd1 vssd1"
+        "u_sv_ram.sv_macros[3].macro vccd1 vssd1 vccd1 vssd1"
     ],
     "MACRO_PLACEMENT_CFG": "dir::macro.cfg",
     "MAGIC_DEF_LABELS": 0,

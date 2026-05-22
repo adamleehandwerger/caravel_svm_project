@@ -172,10 +172,11 @@ module user_project_wrapper #(
     end
 
     // =========================================================================
-    // sv_ram: 128KB support vector storage (8× sky130 16KB SRAM macros)
+    // sv_ram: 64KB support vector storage (4× sky130 16KB SRAM macros)
+    // 256 SVs × 128 features × 2 bytes = 65,536 bytes = 64 KB
     // Port 0 (RW) = Wishbone weight loader  |  Port 1 (RO) = SVM core read
     // =========================================================================
-    wire [17:0] sv_ram_addr_w;
+    wire [14:0] sv_ram_addr_w;
     wire        sv_ram_ren_w;
     wire [15:0] sv_ram_rdata_w;
     wire        sv_wr_en = wb_wr && (wb_reg == 6'h0D);
@@ -185,7 +186,7 @@ module user_project_wrapper #(
         .rd_addr (sv_ram_addr_w),
         .rd_en   (sv_ram_ren_w),
         .rd_data (sv_ram_rdata_w),
-        .wr_addr (sv_wr_ptr),
+        .wr_addr (sv_wr_ptr[14:0]),
         .wr_data (wbs_dat_i[15:0]),
         .wr_en   (sv_wr_en)
     );
@@ -221,9 +222,10 @@ module user_project_wrapper #(
     reg [7:0]  kern_sv_idx;
     reg [7:0]  sv_snap [0:4];
 
+    // ── Score accumulation and counter advance ────────────────────────────────
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            kern_class_idx <= 0; kern_sv_idx <= 0; class_out_r <= 0;
+            kern_class_idx <= 0; kern_sv_idx <= 0;
             for (c = 0; c < 5; c = c+1) begin
                 class_score[c] <= 0; sv_snap[c] <= 50;
             end
@@ -241,14 +243,25 @@ module user_project_wrapper #(
                     kern_class_idx <= kern_class_idx + 1;
                 end else kern_sv_idx <= kern_sv_idx + 1;
             end
-            if (svm_done) begin  // latch argmax
-                class_out_r <= 0;
-                if (class_score[1] > class_score[0])             class_out_r <= 3'd1;
-                if (class_score[2] > class_score[class_out_r])   class_out_r <= 3'd2;
-                if (class_score[3] > class_score[class_out_r])   class_out_r <= 3'd3;
-                if (class_score[4] > class_score[class_out_r])   class_out_r <= 3'd4;
-            end
         end
+    end
+
+    // ── Combinational argmax (blocking assignments update running winner) ─────
+    // Fix: non-blocking <= in a clocked block cannot update class_out_r mid-block,
+    // so all comparisons would use the stale registered value from the prior cycle.
+    reg [2:0] argmax_comb;
+    always @(*) begin
+        argmax_comb = 3'd0;
+        if (class_score[1] > class_score[argmax_comb]) argmax_comb = 3'd1;
+        if (class_score[2] > class_score[argmax_comb]) argmax_comb = 3'd2;
+        if (class_score[3] > class_score[argmax_comb]) argmax_comb = 3'd3;
+        if (class_score[4] > class_score[argmax_comb]) argmax_comb = 3'd4;
+    end
+
+    // ── Register argmax on done ───────────────────────────────────────────────
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) class_out_r <= 3'd0;
+        else if (svm_done) class_out_r <= argmax_comb;
     end
 
     // =========================================================================
@@ -281,8 +294,8 @@ module user_project_wrapper #(
     // =========================================================================
     svm_compute_core #(
         .DATA_WIDTH(16), .FRAC_BITS(10), .DIST_WIDTH(20),
-        .FEATURE_DIM(256), .NUM_SV(250), .MAX_BATCH_SIZE(1000),
-        .FIFO_DEPTH(8192), .ADDR_WIDTH(13)
+        .FEATURE_DIM(128), .NUM_SV(256), .MAX_BATCH_SIZE(1000),
+        .FIFO_DEPTH(4096), .ADDR_WIDTH(12)
     ) u_svm (
         .clk             (svm_gclk),          // <<< GATED CLOCK
         .rst_n           (rst_n),
