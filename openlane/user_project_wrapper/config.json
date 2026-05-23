@@ -2,37 +2,28 @@
     "DESIGN_NAME": "user_project_wrapper",
     "VERILOG_FILES": [
         "dir::../../verilog/rtl/defines.v",
-        "dir::../../verilog/rtl/user_project_wrapper.sv",
-        "dir::../../verilog/rtl/svm_sv_ram.sv"
+        "dir::../../verilog/rtl/user_project_wrapper.sv"
     ],
     "ROUTING_CORES": 1,
     "CLOCK_PERIOD": 40,
     "CLOCK_PORT": "wb_clk_i",
     "CLOCK_NET": "u_svm.clk",
     "FP_PDN_MACRO_HOOKS": [
-        "u_svm vccd1 vssd1 vccd1 vssd1",
-        "u_sv_ram.sv_macros[0].macro vccd1 vssd1 vccd1 vssd1",
-        "u_sv_ram.sv_macros[1].macro vccd1 vssd1 vccd1 vssd1",
-        "u_sv_ram.sv_macros[2].macro vccd1 vssd1 vccd1 vssd1",
-        "u_sv_ram.sv_macros[3].macro vccd1 vssd1 vccd1 vssd1"
+        "u_svm vccd1 vssd1 vccd1 vssd1"
     ],
     "MACRO_PLACEMENT_CFG": "dir::macro.cfg",
     "MAGIC_DEF_LABELS": 0,
     "VERILOG_FILES_BLACKBOX": [
-        "dir::../../verilog/gl/svm_compute_core.v",
-        "dir::../../verilog/rtl/sim_sram_models.sv"
+        "dir::../../verilog/gl/svm_compute_core.v"
     ],
     "EXTRA_LEFS": [
-        "dir::../../lef/svm_compute_core.lef",
-        "$PDK_ROOT/sky130A/libs.ref/sky130_sram_macros/lef/sky130_sram_16kbyte_1rw1r_32x4096_8.lef"
+        "dir::../../lef/svm_compute_core.lef"
     ],
     "EXTRA_GDS_FILES": [
-        "dir::../../gds/svm_compute_core.gds",
-        "$PDK_ROOT/sky130A/libs.ref/sky130_sram_macros/gds/sky130_sram_16kbyte_1rw1r_32x4096_8.gds"
+        "dir::../../gds/svm_compute_core.gds"
     ],
     "EXTRA_LIBS": [
-        "dir::../../lib/svm_compute_core.lib",
-        "$PDK_ROOT/sky130A/libs.ref/sky130_sram_macros/lib/sky130_sram_16kbyte_1rw1r_32x4096_8_TT_1p8V_25C.lib"
+        "dir::../../lib/svm_compute_core.lib"
     ],
     "EXTRA_SPEFS": [],
     "BASE_SDC_FILE": "dir::base_user_project_wrapper.sdc",
