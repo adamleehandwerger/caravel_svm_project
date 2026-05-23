@@ -39,14 +39,29 @@ echo "SIF: $(ls -lh $OL2_SIF 2>/dev/null || echo 'SIF NOT FOUND')"
 
 TOOL_WRAPPERS=$SCRATCH/eda-wrappers
 mkdir -p $TOOL_WRAPPERS
-for TOOL in yosys openroad magic klayout netgen verilator iverilog opensta; do
+
+# All tools except yosys come from the SIF (openroad, magic, etc.)
+for TOOL in openroad magic klayout netgen verilator iverilog opensta; do
     cat > $TOOL_WRAPPERS/$TOOL << WRAP
 #!/bin/bash
 exec apptainer exec --bind /scratch,/tmp $OL2_SIF $TOOL "\$@"
 WRAP
     chmod +x $TOOL_WRAPPERS/$TOOL
 done
+
+# yosys: use nix yosys-with-plugins (0.46) via proot — supports PyOSYS (-y flag)
+# SIF yosys 0.38 does not support -y, which OpenLane v2.3.10 requires for JsonHeader
+PROOT=$SCRATCH/.nix/.nix-portable/bin/proot
+NIX_STORE=$SCRATCH/.nix/.nix-portable/nix
+NIX_YOSYS=$(ls -d $SCRATCH/.nix/.nix-portable/nix/store/*-yosys-with-plugins/bin/yosys 2>/dev/null | head -1)
+cat > $TOOL_WRAPPERS/yosys << WRAP
+#!/bin/bash
+exec $PROOT -b $NIX_STORE:/nix $NIX_YOSYS "\$@"
+WRAP
+chmod +x $TOOL_WRAPPERS/yosys
+
 export PATH=$TOOL_WRAPPERS:$PATH
+echo "yosys:    $(yosys --version 2>&1 | grep 'Yosys' | head -1)"
 echo "openroad: $(openroad --version 2>&1 | head -1)"
 echo "magic:    $(magic --version 2>&1 | head -1 || echo n/a)"
 
