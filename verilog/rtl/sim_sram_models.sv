@@ -1,3 +1,4 @@
+/// sta-blackbox
 // sim_sram_models.sv — behavioral models for sky130 SRAM macros used in simulation.
 // Replace the real hard macros which require the PDK GDS for LVS/DRC but have
 // no synthesizable behavioral model in OpenLane.
