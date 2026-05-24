@@ -25,6 +25,12 @@
 
     "SYNTH_STRATEGY": "AREA 0",
     "MAX_FANOUT_CONSTRAINT": 8,
+    "MAX_TRANSITION_CONSTRAINT": 1.5,
+
+    "SYNTH_DONT_USE_LIST": [
+        "sky130_fd_sc_hd__probe_p_8",
+        "sky130_fd_sc_hd__probec_p_8"
+    ],
 
     "QUIT_ON_TIMING_VIOLATIONS": false,
     "QUIT_ON_HOLD_VIOLATIONS": false,
@@ -32,6 +38,7 @@
     "RUN_LINTER": 0,
     "QUIT_ON_SYNTH_CHECKS": 0,
     "RUN_KLAYOUT_DRC": false,
+    "RUN_MCSTA": 0,
 
     "RT_MAX_LAYER": "met4",
 
