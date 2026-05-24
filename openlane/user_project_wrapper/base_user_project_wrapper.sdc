@@ -95,7 +95,7 @@ set_input_delay -min 1.19 -clock [get_clocks {clk}] [get_ports {wbs_sel_i[*]}]
 set_input_delay -min 1.65 -clock [get_clocks {clk}] [get_ports {wbs_we_i}]
 set_input_delay -min 1.69 -clock [get_clocks {clk}] [get_ports {wbs_cyc_i}]
 set_input_delay -min 1.86 -clock [get_clocks {clk}] [get_ports {wbs_stb_i}]
-if { $::env(IO_SYNC) } {
+if { 0 } {
 	set in_ext_delay 4
 	puts "\[INFO\]: Setting input ports external delay to: $in_ext_delay"
 	set_input_delay -max [expr $in_ext_delay + 4.55] -clock [get_clocks {clk}] [get_ports {io_in[*]}]
@@ -131,7 +131,7 @@ set_output_delay -min 0    -clock [get_clocks {clk}] [get_ports {la_data_out[*]}
 set_output_delay -min 0    -clock [get_clocks {clk}] [get_ports {user_irq[*]}]
 set_output_delay -min 1.13 -clock [get_clocks {clk}] [get_ports {wbs_dat_o[*]}]
 set_output_delay -min 1.37 -clock [get_clocks {clk}] [get_ports {wbs_ack_o}]
-if { $::env(IO_SYNC) } {
+if { 0 } {
 	set out_ext_delay 4
 	puts "\[INFO\]: Setting output ports external delay to: $out_ext_delay"
 	set_output_delay -max [expr $out_ext_delay + 9.12] -clock [get_clocks {clk}] [get_ports {io_out[*]}]
