@@ -14,10 +14,10 @@
     "PL_TARGET_DENSITY_PCT": 45,
 
     "SYNTH_TOP_LEVEL_PARAMETERS": {
-        "FEATURE_DIM": "128",
-        "NUM_SV": "256",
-        "FIFO_DEPTH": "4096",
-        "ADDR_WIDTH": "12",
+        "FEATURE_DIM": "256",
+        "NUM_SV": "250",
+        "FIFO_DEPTH": "8192",
+        "ADDR_WIDTH": "13",
         "DATA_WIDTH": "16",
         "FRAC_BITS": "10",
         "DIST_WIDTH": "20"
