@@ -1,0 +1,21 @@
+---
+project:
+  title: "5-Class Cardiac Arrhythmia Classifier — RBF-SVM ASIC"
+  description: >
+    A hardware accelerator for real-time cardiac arrhythmia classification.
+    Implements a 5-class one-vs-rest RBF-SVM with 500 support vectors (100 per class)
+    and 256-dimensional multi-scale ECG features. Achieves 97.67% accuracy matching
+    sklearn float precision at 40 MHz on sky130A, averaging 0.284 mW at 80 bpm.
+    Targets a 14-day wearable ECG monitor. Host pre-loads SVs and input beats into
+    off-chip SRAM; ASIC classifies autonomously via Wishbone interface.
+  author: "Adam Handwerger"
+  email: "handwerg@pdx.edu"
+  institution: "Portland State University"
+  license: "Apache-2.0"
+  category: "Digital"
+  tag: "machine-learning, medical, svm, cardiac, arrhythmia, ecg"
+  github: "https://github.com/adamleehandwerger/caravel_svm_project"
+  version: "v9"
+  pdk: "sky130A"
+  top_level_netlist: "verilog/gl/user_project_wrapper.v"
+  user_level_netlist: "verilog/gl/svm_compute_core.v"
