@@ -2,42 +2,41 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Caravel user_project_wrapper — 5-class RBF-SVM Cardiac Arrhythmia Classifier
-// ECE410, Portland State University
+// ECE410, Portland State University  |  Milestone: m5  (batch architecture)
 //
-// SV RAM architecture (off-chip):
-//   The 64 KB support vector store (256 SVs × 128 features × 2 B) is held in
-//   host-side flash/SRAM.  The svm_compute_core drives sv_ram_addr[14:0] and
-//   sv_ram_ren out via GPIO[25:10]; the host responds with sv_ram_rdata[15:0]
-//   on LA[15:0] the following cycle.  This eliminates the need for the
-//   sky130_sram_16kbyte macro (not available in this PDK snapshot).
+// Batch architecture (v8):
+//   Host collects 1000 beats at low power, extracts 256-dim features,
+//   pre-loads both SVs and the input matrix into off-chip SRAM, then fires
+//   start.  ASIC reads both datasets autonomously over the same GPIO/LA bus.
 //
-// Clock gating strategy:
-//   - svm_compute_core receives a gated clock (svm_gclk) via sky130 ICG cell
-//   - Gate is OPEN when: warming up, receiving data, start pulsed, post-done drain
-//   - Gate is CLOSED when: fully idle between heartbeats
+// Off-chip RAM (shared bus, host serves from SRAM):
+//   Address layout: {row[10:0], col[7:0]} = 19-bit
+//   Rows  0..249        SV matrix      (250 × 256 × 2 B = 128 KB)
+//   Rows  250..1249     input matrix   (1000 × 256 × 2 B = 512 KB)
+//   GPIO[28:10] = ram_addr[18:0]  (output)
+//   GPIO[29]    = ram_ren          (output)
+//   LA[15:0]    = ram_rdata[15:0] (input from host)
 //
-// ┌─────────────────────────────────────────────────────────┐
-// │  Wishbone Memory Map  (base 0x3000_0000)                │
-// │  0x00 WO  FIFO_DATA    write 16-bit feature word        │
-// │  0x04 RW  CONTROL      [0]=start [1]=vbatt_ok           │
-// │                         [2]=vbatt_warn [3]=kern_ready    │
-// │  0x08 RO  STATUS       [0]=done [1]=error               │
-// │                         [5:2]=error_code [8:6]=class     │
-// │  0x0C RW  NUM_SAMPLES  [9:0]                            │
-// │  0x10–0x20 RW  NUM_SV_0–4  [7:0] SVs per class         │
-// │  0x24 WO  PARAM_WR    [19]=en [18:16]=addr [15:0]=data  │
-// │  0x38 WO  WORK_RD     [10:0]=addr to read from work_ram │
-// │  0x3C RO  STATUS2     work_ram read data [15:0]         │
-// │  SV RAM (off-chip):                                      │
-// │    GPIO[24:10] = sv_ram_addr[14:0]  (output)            │
-// │    GPIO[25]    = sv_ram_ren          (output)            │
-// │    LA[15:0]    = sv_ram_rdata[15:0] (input from host)   │
-// └─────────────────────────────────────────────────────────┘
+// Per-sample output (fires every WRITE_CLASS):
+//   GPIO[2:0] = class_out    GPIO[3] = sample_rdy    IRQ[0] = sample_rdy
 //
-// GPIO[2:0] = class_out    GPIO[3] = done    GPIO[4] = error
-// GPIO[8:5] = error_code   GPIO[9] = fifo_ready
-// GPIO[24:10] = sv_ram_addr[14:0]   GPIO[25] = sv_ram_ren
-// IRQ[0] = done pulse
+// Batch done (fires once at end of batch):
+//   GPIO[4] = done    IRQ[1] = done
+//
+// GPIO[5] = error    GPIO[9:6] = error_code
+//
+// ┌──────────────────────────────────────────────────────────┐
+// │  Wishbone Memory Map  (base 0x3000_0000)                 │
+// │  0x04 RW  CONTROL      [0]=start [1]=vbatt_ok            │
+// │                         [2]=vbatt_warn                    │
+// │  0x08 RO  STATUS       [0]=done(batch) [1]=error         │
+// │                         [5:2]=error_code [8:6]=class      │
+// │                         [9]=sample_rdy                    │
+// │  0x0C RW  NUM_SAMPLES  [9:0]                             │
+// │  0x10–0x20 RW  NUM_SV_0–4  [7:0] SVs per class          │
+// │  0x24 WO  PARAM_WR    [19]=en [18:16]=addr [15:0]=data   │
+// │  0x28 WO  ALPHA_WR    [23:16]=sv_global_idx [15:0]=alpha │
+// └──────────────────────────────────────────────────────────┘
 
 `default_nettype none
 
@@ -67,19 +66,37 @@ module user_project_wrapper #(
     wire rst_n = ~wb_rst_i;
 
     // =========================================================================
+    // Register declarations  (must precede clock gate logic)
+    // =========================================================================
+    reg [31:0] reg_control;
+    reg [9:0]  reg_num_samples;
+    reg [7:0]  reg_num_sv [0:4];
+    reg [19:0] reg_param_wr;
+    reg [23:0] reg_alpha_wr;   // [23:16]=sv_global_idx, [15:0]=alpha Q6.10
+    reg        alpha_wr_en_r;  // 1-cycle write-enable pulse to core
+
+    // =========================================================================
     // Clock gate
     // =========================================================================
     wire [3:0] svm_error_code;
     wire       svm_done;
+    wire       sample_rdy_w;
 
     wire core_warming = (svm_error_code == 4'h8);
 
-    reg [5:0] drain_cnt;
+    // batch_active: set on start pulse, held until batch done
+    reg batch_active;
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)              batch_active <= 1'b0;
+        else if (reg_control[0]) batch_active <= 1'b1;
+        else if (svm_done)       batch_active <= 1'b0;
+    end
 
+    reg [5:0] drain_cnt;
     always @(posedge clk) begin
         if (!rst_n)
             drain_cnt <= 6'd0;
-        else if (qspi_valid_r || reg_control[0] || core_warming)
+        else if (reg_control[0] || core_warming)
             drain_cnt <= 6'd0;
         else if (svm_done)
             drain_cnt <= 6'd32;
@@ -87,7 +104,8 @@ module user_project_wrapper #(
             drain_cnt <= drain_cnt - 6'd1;
     end
 
-    wire svm_clk_en = !rst_n | qspi_valid_r | reg_control[0] | core_warming | (drain_cnt > 0);
+    wire svm_clk_en = !rst_n | batch_active | reg_control[0] | core_warming | (drain_cnt > 0)
+                   | reg_param_wr[19] | alpha_wr_en_r;
 
     wire svm_gclk;
 `ifdef SIMULATION
@@ -105,35 +123,20 @@ module user_project_wrapper #(
     wire       wb_wr    = wb_valid && wbs_we_i;
     wire [5:0] wb_reg   = wbs_adr_i[7:2];
 
-    // =========================================================================
-    // Registers
-    // =========================================================================
-    reg [31:0] reg_control;
-    reg [9:0]  reg_num_samples;
-    reg [7:0]  reg_num_sv [0:4];
-    reg [19:0] reg_param_wr;
-    reg        qspi_valid_r;
-    reg [15:0] qspi_data_r;
-    reg [15:0] work_rd_latch;
-
     integer c;
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             reg_control     <= 32'd8;
             reg_num_samples <= 0;
             reg_param_wr    <= 0;
-            qspi_valid_r    <= 0;
-            qspi_data_r     <= 0;
+            reg_alpha_wr    <= 0;
+            alpha_wr_en_r   <= 1'b0;
             for (c = 0; c < 5; c = c+1) reg_num_sv[c] <= 8'd50;
         end else begin
-            qspi_valid_r     <= 1'b0;
-            reg_control[0]   <= 1'b0;
-            reg_param_wr[19] <= 1'b0;
+            reg_control[0]   <= 1'b0;          // start auto-clears
+            reg_param_wr[19] <= 1'b0;          // param_write_en auto-clears
+            alpha_wr_en_r    <= 1'b0;          // alpha_write_en auto-clears
             if (wb_wr) case (wb_reg)
-                6'h00: begin
-                    qspi_data_r  <= wbs_dat_i[15:0];
-                    qspi_valid_r <= 1'b1;
-                end
                 6'h01: reg_control        <= wbs_dat_i;
                 6'h03: reg_num_samples    <= wbs_dat_i[9:0];
                 6'h04: reg_num_sv[0]      <= wbs_dat_i[7:0];
@@ -142,46 +145,32 @@ module user_project_wrapper #(
                 6'h07: reg_num_sv[3]      <= wbs_dat_i[7:0];
                 6'h08: reg_num_sv[4]      <= wbs_dat_i[7:0];
                 6'h09: reg_param_wr       <= wbs_dat_i[19:0];
-                6'h0E: work_rd_latch      <= work_ram[wbs_dat_i[10:0]];
+                6'h0A: begin
+                    reg_alpha_wr  <= wbs_dat_i[23:0]; // [23:16]=sv_idx [15:0]=alpha
+                    alpha_wr_en_r <= 1'b1;
+                end
                 default: ;
             endcase
         end
     end
 
     // =========================================================================
-    // SV RAM — off-chip interface via GPIO + LA
+    // Off-chip RAM interface  (19-bit address, via GPIO + LA)
+    // GPIO[28:10] = ram_addr[18:0]  GPIO[29] = ram_ren
+    // LA[15:0]    = ram_rdata[15:0] (driven by host)
     // =========================================================================
-    wire [17:0] sv_ram_addr_w;
-    wire        sv_ram_ren_w;
-    wire [15:0] sv_ram_rdata_w = la_data_in[15:0];
+    wire [18:0] ram_addr_w;
+    wire        ram_ren_w;
+    wire [15:0] ram_rdata_w = la_data_in[15:0];
 
     // =========================================================================
-    // work_ram: 2KB scratch (register-based)
+    // Core outputs
     // =========================================================================
-    (* ram_style = "registers" *) reg [15:0] work_ram [0:2047];
-    wire [18:0] work_ram_addr_w;
-    wire [15:0] work_ram_wdata_w;
-    wire        work_ram_wen_w, work_ram_ren_w;
-    reg  [15:0] work_ram_rdata_r;
-
-    always @(posedge clk) begin
-        if (work_ram_wen_w && work_ram_addr_w[10:0] < 2048)
-            work_ram[work_ram_addr_w[10:0]] <= work_ram_wdata_w;
-        if (work_ram_ren_w && work_ram_addr_w[10:0] < 2048)
-            work_ram_rdata_r <= work_ram[work_ram_addr_w[10:0]];
-    end
-
-    // =========================================================================
-    // Class output — argmax is computed inside svm_compute_core; first window
-    // result lives at work_ram[0] for STATUS register and GPIO readback.
-    // =========================================================================
+    wire        svm_error;
+    wire [2:0]  class_out_w;
     wire [15:0] svm_kernel_out;
     wire        svm_kernel_valid;
-    wire        fifo_ready;
-    wire        svm_error;
     wire [127:0] la_scores_w;
-
-    wire [2:0] class_out_r = work_ram[0][2:0];
 
     // =========================================================================
     // Wishbone read mux
@@ -189,14 +178,14 @@ module user_project_wrapper #(
     reg [31:0] wb_rdata;
     always @(*) case (wb_reg)
         6'h01: wb_rdata = reg_control;
-        6'h02: wb_rdata = {23'd0, class_out_r, svm_error_code, svm_error, svm_done};
+        6'h02: wb_rdata = {22'd0, sample_rdy_w, class_out_w,
+                            svm_error_code, svm_error, svm_done};
         6'h03: wb_rdata = {22'd0, reg_num_samples};
         6'h04: wb_rdata = {24'd0, reg_num_sv[0]};
         6'h05: wb_rdata = {24'd0, reg_num_sv[1]};
         6'h06: wb_rdata = {24'd0, reg_num_sv[2]};
         6'h07: wb_rdata = {24'd0, reg_num_sv[3]};
         6'h08: wb_rdata = {24'd0, reg_num_sv[4]};
-        6'h0F: wb_rdata = {16'd0, work_rd_latch};
         default: wb_rdata = 32'd0;
     endcase
 
@@ -220,50 +209,55 @@ module user_project_wrapper #(
         .param_data      (reg_param_wr[15:0]),
         .gamma_reg       (),
         .c_reg           (),
-        .num_sv_per_class_flat({reg_num_sv[4], reg_num_sv[3], reg_num_sv[2],
-                                reg_num_sv[1], reg_num_sv[0]}),
-        .qspi_valid      (qspi_valid_r),
-        .qspi_data       (qspi_data_r),
-        .qspi_ready      (fifo_ready),
-        .sv_ram_addr     (sv_ram_addr_w),
-        .sv_ram_rdata    (sv_ram_rdata_w),
-        .sv_ram_ren      (sv_ram_ren_w),
-        .work_ram_addr   (work_ram_addr_w),
-        .work_ram_wdata  (work_ram_wdata_w),
-        .work_ram_rdata  (work_ram_rdata_r),
-        .work_ram_wen    (work_ram_wen_w),
-        .work_ram_ren    (work_ram_ren_w),
+        .num_sv_per_class_flat ({reg_num_sv[4], reg_num_sv[3], reg_num_sv[2],
+                                 reg_num_sv[1], reg_num_sv[0]}),
+        .ram_addr        (ram_addr_w),
+        .ram_rdata       (ram_rdata_w),
+        .ram_ren         (ram_ren_w),
         .vbatt_warn      (reg_control[2]),
         .vbatt_ok        (reg_control[1]),
         .start           (reg_control[0]),
         .num_samples     (reg_num_samples),
+        .sample_rdy      (sample_rdy_w),
+        .class_out       (class_out_w),
         .done            (svm_done),
         .error           (svm_error),
         .error_code      (svm_error_code),
         .kernel_out      (svm_kernel_out),
         .kernel_valid    (svm_kernel_valid),
         .kernel_ready    (1'b1),
-        .class_scores_la (la_scores_w)
+        .class_scores_la (la_scores_w),
+        .alpha_write_en  (alpha_wr_en_r),
+        .alpha_addr      (reg_alpha_wr[23:16]),
+        .alpha_data      (reg_alpha_wr[15:0])
     );
 
     // =========================================================================
     // GPIO / LA outputs
+    //
+    // [2:0]   class_out       per-sample result
+    // [3]     sample_rdy      pulses once per heartbeat classified
+    // [4]     svm_done        pulses once at end of batch
+    // [5]     svm_error
+    // [9:6]   svm_error_code
+    // [28:10] ram_addr[18:0]  19-bit off-chip address (output)
+    // [29]    ram_ren          off-chip read enable   (output)
     // =========================================================================
-    assign io_out  = {{`MPRJ_IO_PADS-26{1'b0}},
-                       sv_ram_ren_w,
-                       sv_ram_addr_w[14:0],
-                       fifo_ready,
+    assign io_out  = {{`MPRJ_IO_PADS-30{1'b0}},
+                       ram_ren_w,
+                       ram_addr_w[18:0],
                        svm_error_code,
                        svm_error,
                        svm_done,
-                       class_out_r};
+                       sample_rdy_w,
+                       class_out_w};
 
-    assign io_oeb  = {{`MPRJ_IO_PADS-26{1'b1}}, 26'b0};
+    assign io_oeb  = {{`MPRJ_IO_PADS-30{1'b1}}, 30'b0};
 
     assign la_data_out = la_scores_w;
     assign la_oenb     = 128'h0000_0000_0000_0000_0000_0000_0000_FFFF;
 
-    assign user_irq = {2'b0, svm_done};
+    assign user_irq = {1'b0, svm_done, sample_rdy_w};
 
 endmodule
 `default_nettype wire
