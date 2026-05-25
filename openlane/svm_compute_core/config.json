@@ -19,6 +19,7 @@
 
     "ERROR_ON_SYNTH_CHECKS": false,
     "RUN_KLAYOUT_DRC": false,
+    "RUN_KLAYOUT_XOR": false,
     "RUN_MCSTA": 0,
 
     "RT_MAX_LAYER": "met4",
