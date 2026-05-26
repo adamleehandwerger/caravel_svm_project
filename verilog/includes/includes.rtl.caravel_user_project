@@ -13,7 +13,6 @@
 # limitations under the License.
 # SPDX-License-Identifier: Apache-2.0
 
-# SVM cardiac arrhythmia classifier — enable SV 2012 for .sv source files
--g2012
+# SVM cardiac arrhythmia classifier
 -v $(USER_PROJECT_VERILOG)/rtl/user_project_wrapper.sv
 -v $(USER_PROJECT_VERILOG)/rtl/svm_compute_core.sv

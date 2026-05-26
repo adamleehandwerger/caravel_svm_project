@@ -22,3 +22,12 @@ include $(MCW_ROOT)/verilog/dv/make/env.makefile
 include $(MCW_ROOT)/verilog/dv/make/var.makefile
 include $(MCW_ROOT)/verilog/dv/make/cpu.makefile
 include $(MCW_ROOT)/verilog/dv/make/sim.makefile
+
+# Override sim.makefile's %.vvp pattern rule to add -g2012 for SystemVerilog sources
+svm_wb_test.vvp: svm_wb_test_tb.v svm_wb_test.hex
+ifeq ($(SIM),RTL)
+	iverilog -Ttyp -DFUNCTIONAL -DSIM -DUSE_POWER_PINS -DUNIT_DELAY=#1 -g2012 \
+	-f$(VERILOG_PATH)/includes/includes.rtl.caravel \
+	-f$(USER_PROJECT_VERILOG)/includes/includes.rtl.$(CONFIG) \
+	-o $@ $<
+endif

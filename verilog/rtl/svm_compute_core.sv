@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 Adam Handwerger
+// SPDX-License-Identifier: Apache-2.0
 // ============================================================================
 // Multi-Class Cardiac Arrhythmia Detection — SVM Compute Core  v8  (batch)
 // ECE 410 Project  |  Milestone: m5
