@@ -787,8 +787,7 @@ module horner_engine #(
     localparam logic [DATA_WIDTH-1:0] COEFF_14 = 1;
     localparam logic [DATA_WIDTH-1:0] COEFF_15 = 1;
 
-    function automatic logic [DATA_WIDTH-1:0] exp_int_lut;
-        input logic [3:0] idx;
+    function automatic logic [DATA_WIDTH-1:0] exp_int_lut(input logic [3:0] idx);
         case (idx)
             4'd0: exp_int_lut = 16'd1024;
             4'd1: exp_int_lut = 16'd377;
