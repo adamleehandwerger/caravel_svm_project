@@ -38,6 +38,7 @@ module svm_compute_core #(
     parameter int  FEATURE_DIM    = 256,
     parameter int  NUM_SV         = 500,
     parameter int  MAX_BATCH_SIZE = 1000,
+    parameter int  RAM_LATENCY    = 1,     // cycles from ram_ren assert to ram_rdata valid
     parameter real DEFAULT_GAMMA  = 0.25,
     parameter real DEFAULT_C      = 1.0,
     parameter real DEFAULT_BIAS_0 = 0.0,
@@ -171,7 +172,7 @@ module svm_compute_core #(
     logic [7:0] sv_count_reg [5];
     logic [6:0] heartbeat_count;
 
-    // Feature bank write path  (LOAD_INPUT — from off-chip RAM, 1-cycle latency)
+    // Feature bank write path  (LOAD_INPUT — from off-chip RAM, RAM_LATENCY cycles)
     // 9-bit address avoids 8-bit wrap at FEATURE_DIM = 256
     logic [8:0] feat_wr_addr;
     logic       feat_wr_en_r;
@@ -202,6 +203,19 @@ module svm_compute_core #(
         ERROR_STATE
     } state_t;
     state_t state, next_state;
+
+    // Off-chip RAM wait-state counter  (supports RAM_LATENCY >= 1)
+    logic [3:0] ram_wait_cnt;   // counts 0 .. RAM_LATENCY-1
+    wire        ram_beat = (ram_wait_cnt == 4'(RAM_LATENCY - 1));
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) ram_wait_cnt <= '0;
+        else if (state == LOAD_INPUT || state == COMPUTE_DIST) begin
+            if (ram_beat) ram_wait_cnt <= '0;
+            else          ram_wait_cnt <= ram_wait_cnt + 1;
+        end else
+            ram_wait_cnt <= '0;
+    end
 
     // Argmax accumulators (signed — alpha-weighted scores can be negative)
     logic signed [31:0] class_score_acc [5];
@@ -355,7 +369,7 @@ module svm_compute_core #(
             feat_wr_en_r   <= 1'b0;
             feat_wr_addr_r <= '0;
         end else begin
-            feat_wr_en_r   <= (state == LOAD_INPUT) && (feat_wr_addr < 9'(FEATURE_DIM));
+            feat_wr_en_r   <= (state == LOAD_INPUT) && (feat_wr_addr < 9'(FEATURE_DIM)) && ram_beat;
             feat_wr_addr_r <= feat_wr_addr;
         end
     end
@@ -364,7 +378,7 @@ module svm_compute_core #(
         if (!rst_n) feat_wr_addr <= '0;
         else begin
             case (state)
-                LOAD_INPUT: if (feat_wr_addr < 9'(FEATURE_DIM))
+                LOAD_INPUT: if (feat_wr_addr < 9'(FEATURE_DIM) && ram_beat)
                                 feat_wr_addr <= feat_wr_addr + 1;
                 default:    feat_wr_addr <= '0;
             endcase
@@ -393,14 +407,14 @@ module svm_compute_core #(
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) feat_rd_en_r <= 1'b0;
-        else        feat_rd_en_r <= feat_rd_en;
+        else        feat_rd_en_r <= feat_rd_en && ram_beat;
     end
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) feat_rd_addr <= '0;
         else begin
             case (state)
-                COMPUTE_DIST: if (feat_rd_en) feat_rd_addr <= feat_rd_addr + 1;
+                COMPUTE_DIST: if (feat_rd_en && ram_beat) feat_rd_addr <= feat_rd_addr + 1;
                 default:      feat_rd_addr <= '0;
             endcase
         end
@@ -408,7 +422,7 @@ module svm_compute_core #(
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) feat_rd_data <= '0;
-        else if (feat_rd_en)
+        else if (feat_rd_en && ram_beat)
             feat_rd_data <= feature_bank[feat_rd_addr[7:0]];
     end
 
