@@ -16,5 +16,3 @@
 # SVM cardiac arrhythmia classifier
 -sv $(USER_PROJECT_VERILOG)/rtl/user_project_wrapper.sv
 -sv $(USER_PROJECT_VERILOG)/rtl/svm_compute_core.sv
--sv $(USER_PROJECT_VERILOG)/rtl/svm_fifo_sram.sv
--sv $(USER_PROJECT_VERILOG)/rtl/svm_sv_ram.sv
