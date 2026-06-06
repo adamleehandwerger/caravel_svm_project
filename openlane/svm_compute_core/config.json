@@ -29,5 +29,6 @@
 
     "EXTRA_VERILOG_MODELS": [
         "dir::../../verilog/rtl/sim_sram_models.sv"
-    ]
+    ],
+    "SYNTH_TOP_LEVEL_PARAMETERS": "RAM_LATENCY=3"
 }
