@@ -12,3 +12,6 @@
 /dependencies
 /mgmt_core_wrapper
 /logs
+*.out
+*.err
+verilog/dv/**/*.vvp

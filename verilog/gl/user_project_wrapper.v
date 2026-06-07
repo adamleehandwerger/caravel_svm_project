@@ -1,4 +1,10 @@
 module user_project_wrapper (user_clock2,
+    vccd2,
+    vdda1,
+    vdda2,
+    vssa1,
+    vssa2,
+    vssd2,
     wb_clk_i,
     wb_rst_i,
     wbs_ack_o,
@@ -18,6 +24,12 @@ module user_project_wrapper (user_clock2,
     wbs_dat_o,
     wbs_sel_i);
  input user_clock2;
+ inout vccd2;
+ inout vdda1;
+ inout vdda2;
+ inout vssa1;
+ inout vssa2;
+ inout vssd2;
  input wb_clk_i;
  input wb_rst_i;
  output wbs_ack_o;
